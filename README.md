@@ -1,91 +1,195 @@
-# FinGraph — Financial Transaction Fraud Analysis
+# FinGraph — Real-Time Financial Transaction Fraud Analytics
 
 ## 1. Project Overview
 
-FinGraph is a graph-based financial transaction analysis project built using Neo4j. The project explores how graph databases can represent financial transactions and help investigate potentially suspicious activity.
+FinGraph is a graph-based financial transaction analytics project that combines **Neo4j, Apache Kafka, and Apache Flink** to analyse financial transaction networks and process simulated transaction streams.
 
-Unlike traditional relational databases, graph databases represent entities as nodes and their connections as relationships. This makes it easier to explore transaction flows and connections between accounts.
+The project represents financial accounts as graph nodes and transactions as directed relationships, enabling the exploration of transaction flows, suspicious connections, and fraud-labelled activity.
+
+In addition to static graph analysis, FinGraph implements a streaming pipeline in which a Python transaction simulator publishes transaction events to Kafka, Apache Flink consumes and processes those events, and Neo4j stores the resulting graph relationships.
 
 ## 2. Project Objectives
 
-- Represent financial accounts as graph nodes.
-- Represent transactions as directed relationships between accounts.
-- Analyse transaction patterns using Cypher queries.
-- Identify accounts associated with fraud-labelled transactions.
-- Explore multi-hop transaction paths.
-- Evaluate basic graph query and transaction ingestion performance.
+- Model financial accounts and transactions using a graph database.
+- Analyse fraud-labelled transactions using Cypher queries.
+- Explore multi-hop transaction paths and account connections.
+- Implement a simulated real-time transaction ingestion pipeline.
+- Integrate Apache Kafka and Apache Flink with Neo4j.
+- Verify successful streaming ingestion into the graph database.
+- Evaluate preliminary graph query and transaction ingestion performance.
 
 ## 3. Dataset
 
-This project uses the synthetic financial transaction dataset from **IBM AMLSim**.
+FinGraph uses a synthetic financial transaction dataset from **IBM AMLSim**.
 
-The dataset contains:
-- Account information.
-- Financial transaction records.
-- Transaction types and amounts.
-- Timestamps.
-- Fraud-related labels and alert information.
+The dataset includes account information, transaction records, transaction amounts and types, timestamps, fraud-related labels, and alert information.
 
-The dataset is synthetic and intended for research and experimentation.
+The dataset is synthetic and intended for research, development, and experimentation.
+
+### Verified Dataset Statistics
+
+| Metric | Result |
+|---|---:|
+| Total accounts | 100 |
+| Total transaction relationships | 17,144 |
+| Fraud-labelled transactions | 18 |
+| Successfully streamed transactions | 44 |
+
+The 44 streamed transactions were verified in Neo4j using the `stream_processed` relationship property.
+
+Because the streaming pipeline uses Cypher `MERGE`, replayed transactions can update existing relationships without increasing the total relationship count.
 
 ## 4. Technology Stack
 
 | Technology | Purpose |
 |---|---|
-| Neo4j | Graph database |
-| Cypher | Graph query language |
-| CSV | Source data format |
-| Git | Version control |
-| GitHub | Project repository |
-| VS Code | Code editing and project development |
+| Python | Transaction simulation and Kafka event production |
+| Apache Kafka | Transaction event streaming and messaging |
+| Apache Flink | Stream processing and transaction ingestion |
+| Java | Flink streaming application and Neo4j sink |
+| Apache Maven | Java dependency management and application packaging |
+| Neo4j | Graph database and transaction relationship storage |
+| Cypher | Graph queries and fraud analysis |
+| Docker / Docker Compose | Containerized Kafka and Flink services |
+| Gson | JSON transaction parsing |
+| Git / GitHub | Version control and project hosting |
+| VS Code | Development environment |
 
-## 5. Graph Data Model
+## 5. System Architecture
 
-The project uses two main graph components:
+```text
+          Synthetic AMLSim Dataset
+                    |
+                    v
+        Python Transaction Simulator
+                    |
+                    v
+              Apache Kafka
+          (fin_transactions)
+                    |
+                    v
+               Apache Flink
+         (Java Streaming Application)
+                    |
+                    v
+            Neo4j Transaction Sink
+                    |
+                    v
+              Neo4j Database
+                    |
+                    v
+          Cypher Fraud Analysis
+```
 
-**Account Nodes**
+### Pipeline Components
 
-Each account is represented as an `Account` node containing properties such as:
-- Account ID
-- Customer ID
-- Initial balance
-- Country
-- Account type
-- Fraud label
+**Python Transaction Simulator**
 
-**Transaction Relationships**
+Reads transaction records from the source dataset and publishes JSON messages to the Kafka topic `fin_transactions`.
 
-Each transaction is represented by a directed `TRANSFERRED_TO` relationship connecting a sender account to a receiver account.
+**Apache Kafka**
 
-Transaction relationships contain properties such as:
-- Transaction ID
-- Transaction amount
-- Transaction type
-- Timestamp
-- Fraud label
-- Alert ID
+Acts as the messaging layer between the transaction simulator and the streaming application.
 
-## 6. Work Completed
+**Apache Flink**
 
-### Data Import and Graph Construction
+Consumes transaction events from Kafka and processes them through a Java streaming job.
+
+**Neo4j Transaction Sink**
+
+Parses incoming JSON events, matches the corresponding sender and receiver accounts, and creates or updates `TRANSFERRED_TO` relationships in Neo4j.
+
+**Neo4j Graph Database**
+
+Stores the account network and transaction relationships for further graph-based analysis.
+
+## 6. Graph Data Model
+
+### Account Nodes
+
+Each financial account is represented as an `Account` node, identified by its `ACCOUNT_ID`.
+
+Account information may include customer identifiers, balances, country, account type, and other available source attributes.
+
+### Transaction Relationships
+
+Transactions are represented as directed relationships:
+
+```cypher
+(sender:Account)-[:TRANSFERRED_TO]->(receiver:Account)
+```
+
+Relationship properties include:
+
+- `tx_id` — Transaction identifier
+- `amount` — Transaction amount
+- `tx_type` — Transaction type
+- `timestamp` — Transaction timestamp
+- `is_fraud` — Dataset fraud label
+- `alert_id` — Associated alert identifier
+- `stream_processed` — Indicates that the transaction was processed by the Flink pipeline
+
+The `stream_processed` property is added during streaming ingestion to support verification.
+
+## 7. Implementation
+
+### 7.1 Data Import and Graph Construction
 
 - Inspected the source CSV files.
 - Imported account records into Neo4j.
-- Created account-to-account transaction relationships.
-- Verified imported records against the source dataset.
+- Created directed transaction relationships.
+- Verified the graph against the source dataset.
+- Used Cypher `MERGE` to avoid creating duplicate relationships when importing the same transactions.
 
-### Fraud Analysis
+### 7.2 Fraud Analysis
 
-Created Cypher queries to:
-- Count total accounts and transactions.
+Implemented Cypher queries to:
+
+- Count accounts and transaction relationships.
 - Identify fraud-labelled transactions.
 - Rank accounts by flagged outgoing transactions.
-- Calculate the total amount associated with flagged transfers.
-- Visualise flagged transaction connections.
+- Calculate amounts associated with flagged transfers.
+- Visualize fraud-labelled transaction connections.
+- Explore multi-hop transaction paths.
 
-### Graph Query Performance
+Fraud analysis uses the labels already provided in the synthetic dataset. The project does not implement an independently trained fraud prediction model.
 
-Executed a three-hop transaction traversal to explore connected accounts.
+### 7.3 Real-Time Streaming Implementation
+
+Implemented the following pipeline:
+
+1. A Python simulator reads transaction records from the dataset.
+2. Transactions are serialized into JSON messages.
+3. Messages are published to the Kafka topic `fin_transactions`.
+4. A Java-based Apache Flink job consumes the Kafka stream.
+5. Gson parses the incoming transaction messages.
+6. The Neo4j Java Driver writes the transactions to Neo4j.
+7. Cypher `MERGE` creates or updates the corresponding transaction relationships.
+8. The `stream_processed` property marks relationships processed through the streaming pipeline.
+
+### 7.4 Streaming Verification
+
+The Flink application was successfully deployed and reached the `RUNNING` state.
+
+The following Cypher query was used to verify streaming ingestion:
+
+```cypher
+MATCH ()-[t:TRANSFERRED_TO]->()
+WHERE t.stream_processed = true
+RETURN count(t) AS streamed_transactions;
+```
+
+**Verified result: 44 streamed transactions.**
+
+This confirms successful end-to-end processing from Kafka through Flink into Neo4j.
+
+The result represents a functional integration test, not a sustained throughput or latency benchmark.
+
+## 8. Performance Evaluation
+
+### 8.1 Graph Query Performance
+
+A three-hop transaction traversal was executed to evaluate preliminary graph query performance.
 
 | Test | Completion Time |
 |---|---:|
@@ -99,73 +203,150 @@ Executed a three-hop transaction traversal to explore connected accounts.
 
 **Performance target:** Less than 100 milliseconds.
 
-All four repeat runs completed below the target in the tested environment.
+All four repeat executions completed below the target in the tested environment.
 
-### Transaction Ingestion Performance
+These observations are exploratory and should not be interpreted as production-scale performance guarantees.
 
-Performed two single-record ingestion tests:
+### 8.2 Single-Record Ingestion Performance
+
+Two preliminary ingestion tests were conducted:
 
 | Test | Completion Time |
 |---|---:|
-| CSV processing using MERGE | 640 ms |
-| New relationship creation using CREATE | 124 ms |
+| CSV processing using `MERGE` | 640 ms |
+| New relationship creation using `CREATE` | 124 ms |
 
 **Performance target:** Less than 1 second.
 
-Both tests completed below the target in the observed runs.
+Both tests completed below the target.
 
-These tests used a single CSV record and do not represent a sustained real-time streaming pipeline.
+These tests measured individual operations and are separate from the Kafka–Flink streaming implementation.
 
-## 7. Dataset Verification
-
-The final verified graph contains:
-
-| Metric | Result |
-|---|---:|
-| Total accounts | 100 |
-| Total transaction relationships | 17,144 |
-| Fraud-labelled transactions | 18 |
-
-A temporary test relationship created during ingestion testing was deleted, and the original transaction count was verified again.
-
-## 8. Project Structure
+## 9. Project Structure
 
 ```text
 FinGraph/
-│
+|
 ├── cypher/
 │   ├── 01_import_accounts.cypher
 │   ├── 02_import_transactions.cypher
 │   └── 03_fraud_analysis.cypher
-│
+|
 ├── data/
 │   └── 100vertices-10Kedges/
-│
+|
+├── simulator/
+│   └── transaction_simulator.py
+|
+├── kafka/
+│   └── compose.yaml
+|
+├── flink/
+│   ├── pom.xml
+│   └── src/main/java/com/fingraph/
+│       ├── FinGraphStreamingJob.java
+│       └── Neo4jTransactionSink.java
+|
 ├── README.md
 └── .gitignore
 ```
 
-The dataset is maintained locally and excluded from Git tracking.
+The synthetic dataset is maintained locally and excluded from Git tracking.
 
-## 9. Current Project Scope and Limitations
+Generated Maven build artifacts and sensitive credentials should also be excluded from version control.
 
-The current implementation is a static graph-analysis prototype using synthetic, pre-labelled transaction data.
+## 10. Running the Streaming Pipeline
 
-Fraud-labelled transactions are identified using the labels already present in the dataset. No independent machine learning fraud detection model has been developed.
+### Prerequisites
 
-The ingestion performance tests are single-record tests, not continuous streaming benchmarks.
+- Python with the Kafka producer dependency
+- Docker Desktop
+- Neo4j Desktop with a running database instance
+- Java 17
+- Apache Maven
 
-## 10. Future Work
+### Start Kafka and Flink
 
-- Implement a real-time transaction ingestion pipeline.
-- Integrate incoming transactions with Neo4j.
-- Develop graph-based suspicious transaction analysis.
-- Explore multi-hop transaction patterns.
-- Build a dashboard for transaction monitoring and analysis.
-- Conduct further performance and scalability testing.
+From the project root:
 
-## 11. Conclusion
+```powershell
+$env:NEO4J_PASSWORD = Read-Host "Enter Neo4j password"
 
-FinGraph establishes a foundation for graph-based financial transaction analysis using Neo4j. The current implementation successfully models accounts and transactions, analyses fraud-labelled activity, visualises transaction connections, and demonstrates promising preliminary query and ingestion performance.
+docker compose -f .\kafka\compose.yaml up -d
+```
 
-The next phase will focus on developing real-time transaction processing and more advanced suspicious activity analysis.
+The Flink dashboard is available at:
+
+`http://localhost:8081`
+
+### Build the Flink Application
+
+```powershell
+mvn -f .\flink\pom.xml clean package -DskipTests
+```
+
+### Deploy the Streaming Job
+
+```powershell
+docker exec fingraph-flink-jobmanager mkdir -p /opt/flink/usrlib
+
+docker cp .\flink\target\fingraph-streaming-2.14.3.jar fingraph-flink-jobmanager:/opt/flink/usrlib/fingraph-streaming.jar
+
+docker exec fingraph-flink-jobmanager flink run -d -c com.fingraph.FinGraphStreamingJob /opt/flink/usrlib/fingraph-streaming.jar
+```
+
+The JAR filename corresponds to the currently verified Maven build and may change if the project version is updated.
+
+### Start the Transaction Simulator
+
+```powershell
+python .\simulator\transaction_simulator.py
+```
+
+The simulator publishes transactions to Kafka for consumption by the Flink application.
+
+### Verify Streaming Ingestion
+
+Run in Neo4j Query:
+
+```cypher
+MATCH ()-[t:TRANSFERRED_TO]->()
+WHERE t.stream_processed = true
+RETURN count(t) AS streamed_transactions;
+```
+
+A positive count indicates that transaction relationships have been processed through the streaming pipeline.
+
+**Configuration note:** The Neo4j instance must be accessible at the Bolt address configured in the Java sink. The current local implementation uses `host.docker.internal:7687`.
+
+## 11. Limitations
+
+- The dataset is synthetic rather than real financial transaction data.
+- Fraud-labelled transactions are identified using existing dataset labels.
+- No machine learning fraud detection model has been developed.
+- The transaction simulator replays historical records rather than receiving live banking events.
+- Streaming verification covered 44 transactions, not a large-scale load test.
+- The implementation has not been benchmarked for sustained throughput, end-to-end latency, or fault tolerance.
+- The Neo4j sink performs synchronous database writes and has not been optimized for high-volume production workloads.
+- The current implementation is designed for local development and demonstration.
+
+## 12. Future Enhancements
+
+- Develop graph-based suspicious activity detection rules.
+- Explore transaction cycles, shared counterparties, and multi-hop fraud patterns.
+- Build a monitoring dashboard for financial transactions.
+- Implement stream processing metrics and performance monitoring.
+- Introduce Flink checkpointing and stronger failure-recovery mechanisms.
+- Optimize Neo4j ingestion using batching and asynchronous processing.
+- Evaluate scalability with larger transaction datasets.
+- Investigate graph-based machine learning techniques for fraud detection.
+
+## 13. Conclusion
+
+FinGraph demonstrates how graph databases and stream processing technologies can be combined for financial transaction analytics.
+
+The project successfully constructs a transaction network containing **100 accounts and 17,144 transaction relationships**, identifies **18 fraud-labelled transactions**, and implements a functional **Python → Kafka → Flink → Neo4j** streaming pipeline.
+
+The successful processing and verification of **44 streamed transactions** demonstrates end-to-end integration between the streaming and graph database components.
+
+FinGraph provides a foundation for further development in graph-based fraud investigation, streaming analytics, and financial transaction monitoring.

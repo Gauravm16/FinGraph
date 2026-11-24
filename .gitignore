@@ -182,3 +182,24 @@ cython_debug/
 
 # FinGraph local dataset
 data/
+
+# FinGraph - Java / Maven
+*.class
+*.jar
+
+# Credentials and local configuration
+.env.*
+!.env.example
+*.key
+*.pem
+secrets/
+
+# IDE and operating system
+.idea/
+.vscode/
+.DS_Store
+Thumbs.db
+
+# Temporary development files
+flink/maven-debug.txt
+flink/test-pom.xml
